@@ -1,5 +1,4 @@
-# nodejs-js-compress-benchmark
- Benchmark NodeJS/JS compression libraries
+# Benchmark NodeJS/JS compression libraries
 
 **Benchmarked compression libraries:**
 ```
