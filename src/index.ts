@@ -54,6 +54,14 @@ const prepareData = (target: any, text: string, title: string) => {
   });
   target.compressedBufferLz4 = compressedBufferLz4;
 
+  target.compressedBufferBrotli = zlib.brotliCompressSync(uncompressedBuffer);
+  target.compressedBufferBrotliLvL1 = zlib.brotliCompressSync(uncompressedBuffer, {
+    params: {
+      [zlib.constants.BROTLI_PARAM_MODE]: zlib.constants.BROTLI_MODE_TEXT,
+      [zlib.constants.BROTLI_PARAM_QUALITY]: 0,
+    },
+  });
+
   console.log('\n');
 
   console.log(title);
@@ -63,7 +71,7 @@ const prepareData = (target: any, text: string, title: string) => {
   console.log(`Original length(buffer): ${uncompressedBuffer.length}, Original length(text):${text.length}`);
 
   console.log(
-    `Snappy - Ratio: ${
+    `Node-snappy/SnappyJS - Ratio: ${
       Math.round((compressedBuffer.length / uncompressedBuffer.length) * 1000) / 1000
     }  Compressed size: ${compressedBuffer.length}`,
   );
@@ -73,14 +81,24 @@ const prepareData = (target: any, text: string, title: string) => {
     }  Compressed size: ${compressedBufferLz4.length}`,
   );
   console.log(
-    `Gzip - Ratio: ${
+    `Gzip-default - Ratio: ${
       Math.round((compressedBufferGzip.length / uncompressedBuffer.length) * 1000) / 1000
     }  Compressed size: ${compressedBufferGzip.length}`,
   );
   console.log(
-    `Gzip-LvL1 - Ratio: ${
+    `Gzip-Level=1 - Ratio: ${
       Math.round((compressedBufferGzipLvL1.length / uncompressedBuffer.length) * 1000) / 1000
     }  Compressed size: ${compressedBufferGzipLvL1.length}`,
+  );
+  console.log(
+    `Brotli-default - Ratio: ${
+      Math.round((target.compressedBufferBrotli.length / uncompressedBuffer.length) * 1000) / 1000
+    }  Compressed size: ${target.compressedBufferBrotli.length}`,
+  );
+  console.log(
+    `Brotli-Quality=0 - Ratio: ${
+      Math.round((target.compressedBufferBrotliLvL1.length / uncompressedBuffer.length) * 1000) / 1000
+    }  Compressed size: ${target.compressedBufferBrotliLvL1.length}`,
   );
 
   console.log('\n');
@@ -99,6 +117,9 @@ const runBenchmark = () => {
     .add('node-snappy#compress', (): void => {
       snappy.compressSync(data.uncompressedBuffer);
     })
+    .add('snappyjs#compress', (): void => {
+      snappyjs.compress(data.uncompressedBuffer);
+    })
     .add('Lz4#compress', (): void => {
       lz4Mod.compress(data.uncompressedBuffer, {
         frameInfo: {
@@ -106,17 +127,32 @@ const runBenchmark = () => {
         },
       });
     })
-    .add('snappyjs#compress', (): void => {
-      snappyjs.compress(data.uncompressedBuffer);
+    .add('brotli#compress_Quality=0', (): void => {
+      zlib.brotliCompressSync(data.uncompressedBuffer, {
+        params: {
+          [zlib.constants.BROTLI_PARAM_MODE]: zlib.constants.BROTLI_MODE_TEXT,
+          [zlib.constants.BROTLI_PARAM_QUALITY]: 0,
+        },
+      });
     })
-    .add('gzip#compress', (): void => {
-      zlib.gzipSync(data.uncompressedBuffer);
-    })
-    .add('gzip#compress_lvl1', (): void => {
+    .add('gzip#compress_Level=1', (): void => {
       zlib.gzipSync(data.uncompressedBuffer, { level: 1 });
     })
+
+    .add('gzip-default#compress', (): void => {
+      zlib.gzipSync(data.uncompressedBuffer);
+    })
+
+    .add('brotli-default#compress', (): void => {
+      zlib.brotliCompressSync(data.uncompressedBuffer);
+    })
+
     .add('node-snappy#uncompress', (): void => {
       snappy.uncompressSync(data.compressedBufferSnappy, null);
+    })
+
+    .add('snappyjs#uncompress', (): void => {
+      snappyjs.uncompress(data.compressedBufferSnappy);
     })
     .add('Lz4#uncompress', (): void => {
       if (data.compressedBufferLz4.length > 10000) {
@@ -125,18 +161,20 @@ const runBenchmark = () => {
         throw new Error('Disabled memory overflow');
       }
     })
-    .add('snappyjs#uncompress', (): void => {
-      snappyjs.uncompress(data.compressedBufferSnappy);
+    .add('brotli#uncompress_Quality=0', (): void => {
+      zlib.brotliDecompressSync(data.compressedBufferBrotliLvL1);
+    })
+    .add('gzip#uncompress_Level=1', (): void => {
+      zlib.gunzipSync(data.compressedBufferGzipLvL1);
     })
     .add('gzip#uncompress', (): void => {
       zlib.gunzipSync(data.compressedBufferGzip);
     })
-    .add('gzip#uncompressLvL1', (): void => {
-      zlib.gunzipSync(data.compressedBufferGzipLvL1);
+    .add('brotli#uncompress', (): void => {
+      zlib.brotliDecompressSync(data.compressedBufferBrotli);
     });
 
   data = {};
-
   prepareData(data, text1, `Real text #1 (length ${text1.length})`);
   suite.reset().run();
   console.log();
