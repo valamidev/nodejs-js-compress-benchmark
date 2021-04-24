@@ -1,6 +1,13 @@
 # nodejs-js-compress-benchmark
  Benchmark NodeJS/JS compression libraries
 
+**Benchmarked compression libraries:**
+```
+snappy(aka. node-snappy) - https://www.npmjs.com/package/snappy
+snappyjs - https://www.npmjs.com/package/snappyjs
+gzip(NodeJS native)
+```
+
 
 ```
 (https://raw.githubusercontent.com/idc9/stor390/master/notes/natural_language_processing/orwell_novels/1984.txt)
