@@ -5,9 +5,16 @@ import snappy from 'snappy';
 import Benchmark from 'benchmark';
 import zlib from 'zlib';
 
+const lz4init = require('lz4-asm');
+
 const fetch = require('node-fetch');
 const snappyjs = require('snappyjs');
 const faker = require('faker');
+
+const lz4Module = {};
+const lz4Ready = lz4init(lz4Module);
+
+let lz4Mod: any = {};
 
 const randomString = (length: number): string => {
   let result = '';
@@ -30,7 +37,7 @@ const randomJSON = (length: number): string => {
   return result;
 };
 
-const prepareData = (target: any, text: string, printRation = true) => {
+const prepareData = (target: any, text: string, title: string) => {
   const uncompressedBuffer = Buffer.from(text);
   target.uncompressedBuffer = uncompressedBuffer;
   const compressedBuffer = snappy.compressSync(uncompressedBuffer);
@@ -40,25 +47,43 @@ const prepareData = (target: any, text: string, printRation = true) => {
   const compressedBufferGzipLvL1 = zlib.gzipSync(uncompressedBuffer, { level: 1 });
   target.compressedBufferGzipLvL1 = compressedBufferGzipLvL1;
 
-  if (printRation) {
-    console.log(`Original length(buffer): ${uncompressedBuffer.length}, Original length(text):${text.length}`);
+  const compressedBufferLz4 = lz4Mod.compress(uncompressedBuffer, {
+    frameInfo: {
+      blockMode: 1,
+    },
+  });
+  target.compressedBufferLz4 = compressedBufferLz4;
 
-    console.log(
-      `Snappy: Ratio: ${Math.round((compressedBuffer.length / uncompressedBuffer.length) * 1000) / 1000}  Compressed: ${
-        compressedBuffer.length
-      }`,
-    );
-    console.log(
-      `Gzip: Ratio: ${
-        Math.round((compressedBufferGzip.length / uncompressedBuffer.length) * 1000) / 1000
-      }  Compressed: ${compressedBufferGzip.length}`,
-    );
-    console.log(
-      `Gzip-LvL1: Ratio: ${
-        Math.round((compressedBufferGzipLvL1.length / uncompressedBuffer.length) * 1000) / 1000
-      }  Compressed: ${compressedBufferGzipLvL1.length}`,
-    );
-  }
+  console.log('\n');
+
+  console.log(title);
+
+  console.log('\n');
+
+  console.log(`Original length(buffer): ${uncompressedBuffer.length}, Original length(text):${text.length}`);
+
+  console.log(
+    `Snappy - Ratio: ${
+      Math.round((compressedBuffer.length / uncompressedBuffer.length) * 1000) / 1000
+    }  Compressed size: ${compressedBuffer.length}`,
+  );
+  console.log(
+    `Lz4 - Ratio: ${
+      Math.round((compressedBufferLz4.length / uncompressedBuffer.length) * 1000) / 1000
+    }  Compressed size: ${compressedBufferLz4.length}`,
+  );
+  console.log(
+    `Gzip - Ratio: ${
+      Math.round((compressedBufferGzip.length / uncompressedBuffer.length) * 1000) / 1000
+    }  Compressed size: ${compressedBufferGzip.length}`,
+  );
+  console.log(
+    `Gzip-LvL1 - Ratio: ${
+      Math.round((compressedBufferGzipLvL1.length / uncompressedBuffer.length) * 1000) / 1000
+    }  Compressed size: ${compressedBufferGzipLvL1.length}`,
+  );
+
+  console.log('\n');
 };
 
 let text1: any;
@@ -74,6 +99,13 @@ const runBenchmark = () => {
     .add('node-snappy#compress', (): void => {
       snappy.compressSync(data.uncompressedBuffer);
     })
+    .add('Lz4#compress', (): void => {
+      lz4Mod.compress(data.uncompressedBuffer, {
+        frameInfo: {
+          blockMode: 1,
+        },
+      });
+    })
     .add('snappyjs#compress', (): void => {
       snappyjs.compress(data.uncompressedBuffer);
     })
@@ -85,6 +117,13 @@ const runBenchmark = () => {
     })
     .add('node-snappy#uncompress', (): void => {
       snappy.uncompressSync(data.compressedBufferSnappy, null);
+    })
+    .add('Lz4#uncompress', (): void => {
+      if (data.compressedBufferLz4.length > 10000) {
+        lz4Mod.decompress(data.compressedBufferLz4);
+      } else {
+        throw new Error('Disabled memory overflow');
+      }
     })
     .add('snappyjs#uncompress', (): void => {
       snappyjs.uncompress(data.compressedBufferSnappy);
@@ -98,44 +137,37 @@ const runBenchmark = () => {
 
   data = {};
 
-  prepareData(data, text1);
-  console.log(`Real text #1 (length ${text1.length}, byte length ${data.uncompressedBuffer.length})`);
+  prepareData(data, text1, `Real text #1 (length ${text1.length})`);
   suite.reset().run();
   console.log();
 
   data = {};
-  prepareData(data, text2);
-  console.log(`Real text #2 (length ${text2.length}, byte length ${data.uncompressedBuffer.length})`);
+  prepareData(data, text2, `Real text #2 (length ${text2.length})`);
   suite.reset().run();
   console.log();
 
   data = {};
-  prepareData(data, randomString(1000000));
-  console.log(`Random string (length 1000000, byte length ${data.uncompressedBuffer.length})`);
+  prepareData(data, randomString(1000000), 'Random string (length 1000000)');
   suite.reset().run();
   console.log();
 
   data = {};
-  prepareData(data, randomJSON(1024));
-  console.log(`Random JSON (length ~1024, byte length ${data.uncompressedBuffer.length})`);
+  prepareData(data, randomJSON(1024), 'Random JSON (length ~1024)');
   suite.reset().run();
   console.log();
 
   data = {};
-  prepareData(data, randomJSON(512));
-  console.log(`Random JSON (length ~512, byte length ${data.uncompressedBuffer.length})`);
+  prepareData(data, randomJSON(512), 'Random JSON (length ~512)');
   suite.reset().run();
   console.log();
 
   data = {};
-  prepareData(data, randomJSON(256));
-  console.log(`Random JSON (length ~256, byte length ${data.uncompressedBuffer.length})`);
+  prepareData(data, randomJSON(256), 'Random JSON (length ~256)');
   suite.reset().run();
   console.log();
 
   data = {};
-  prepareData(data, randomJSON(100));
-  console.log(`Random JSON (length ~100, byte length ${data.uncompressedBuffer.length})`);
+  prepareData(data, randomJSON(100), 'Random JSON (length ~100)');
   suite.reset().run();
   console.log();
 };
@@ -153,6 +185,10 @@ const getFixtures = async () => {
 };
 
 const start = async (): Promise<void> => {
+  const { lz4js } = await lz4Ready;
+
+  lz4Mod = lz4js;
+
   await getFixtures();
 
   await runBenchmark();
